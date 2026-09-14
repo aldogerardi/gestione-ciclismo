@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.63";
+const APP_VERSION = "1.64";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1638,6 +1638,13 @@ function importaBackup() {
 
 /* ===================== AVVIO ===================== */
 let nuovoWorkerInAttesa = null;
+let ricaricaGiaFatta = false;
+
+function ricaricaUnaVolta() {
+  if (ricaricaGiaFatta) return;
+  ricaricaGiaFatta = true;
+  window.location.reload();
+}
 
 function mostraBannerAggiornamento(worker) {
   nuovoWorkerInAttesa = worker;
@@ -1646,7 +1653,10 @@ function mostraBannerAggiornamento(worker) {
 
 function applicaAggiornamento() {
   if (!nuovoWorkerInAttesa) return;
+  document.getElementById("updateBanner").querySelector("button").textContent = "Aggiornamento...";
   nuovoWorkerInAttesa.postMessage("SKIP_WAITING");
+  // fallback: se per qualche motivo il browser non ricarica da solo entro 2,5s, forziamo noi
+  setTimeout(ricaricaUnaVolta, 2500);
 }
 
 if ("serviceWorker" in navigator) {
@@ -1669,12 +1679,7 @@ if ("serviceWorker" in navigator) {
     }).catch(() => {});
 
     // quando il nuovo service worker prende il controllo, ricarica la pagina
-    let ricaricaGiaFatta = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (ricaricaGiaFatta) return;
-      ricaricaGiaFatta = true;
-      window.location.reload();
-    });
+    navigator.serviceWorker.addEventListener("controllerchange", ricaricaUnaVolta);
   });
 }
 
