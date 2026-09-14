@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.41";
+const APP_VERSION = "1.61";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -28,6 +28,7 @@ const SEZIONI = [
   { id: "sponsor", nome: "Sponsor", icona: "🤝" },
   { id: "abbigliamento", nome: "Abbigliamento", icona: "👕" },
   { id: "uscite", nome: "Uscite gruppo", icona: "🚴" },
+  { id: "presenze", nome: "Presenze", icona: "✅" },
   { id: "gare", nome: "Gare", icona: "🏁" },
   { id: "circuiti", nome: "Circuiti", icona: "🗺️" },
   { id: "report", nome: "Report", icona: "📊" },
@@ -336,6 +337,10 @@ function renderContent() {
   }
   if (currentSection === "uscite") {
     renderUsciteSection(content);
+    return;
+  }
+  if (currentSection === "presenze") {
+    renderPresenzeSection(content);
     return;
   }
   if (currentSection === "abbigliamento") {
@@ -1228,6 +1233,98 @@ function renderUsciteSection(content) {
     </div>
   `;
   }).join("");
+}
+
+/* ===================== SEZIONE PRESENZE USCITE ===================== */
+let presenzeUscitaSel = "";
+
+function selezionaUscitaPresenze(id) {
+  presenzeUscitaSel = id;
+  render();
+}
+
+function togglePresenza(atletaId) {
+  const u = state.uscite.find(x => x.id === presenzeUscitaSel);
+  if (!u) return;
+  if (!u.presenti) u.presenti = [];
+  const idx = u.presenti.indexOf(atletaId);
+  if (idx >= 0) {
+    u.presenti.splice(idx, 1);
+  } else {
+    u.presenti.push(atletaId);
+  }
+  saveState();
+  render();
+}
+
+function renderPresenzeSection(content) {
+  const uscite = [...state.uscite].sort((a, b) => {
+    if (a.data && b.data && a.data !== b.data) return b.data.localeCompare(a.data);
+    return (b.ora || "").localeCompare(a.ora || "");
+  });
+
+  if (presenzeUscitaSel && !uscite.find(u => u.id === presenzeUscitaSel)) {
+    presenzeUscitaSel = "";
+  }
+
+  const atletiOrdinati = [...state.anagrafica].sort((a, b) => (a.cognome + a.nome).localeCompare(b.cognome + b.nome));
+  const uscitaSel = presenzeUscitaSel ? state.uscite.find(u => u.id === presenzeUscitaSel) : null;
+  const presentiSel = new Set(uscitaSel ? (uscitaSel.presenti || []) : []);
+
+  // classifica presenze su tutte le uscite
+  const conteggio = {};
+  state.uscite.forEach(u => (u.presenti || []).forEach(id => {
+    conteggio[id] = (conteggio[id] || 0) + 1;
+  }));
+  const classifica = atletiOrdinati
+    .map(a => ({ atleta: a, count: conteggio[a.id] || 0 }))
+    .filter(r => r.count > 0)
+    .sort((a, b) => b.count - a.count || (a.atleta.cognome + a.atleta.nome).localeCompare(b.atleta.cognome + b.atleta.nome));
+
+  content.innerHTML = `
+    <div class="section-title"><span class="dot"></span>Presenze uscite</div>
+
+    <div class="field-group">
+      <label>Seleziona uscita</label>
+      <select id="presenzeUscitaSelect" onchange="selezionaUscitaPresenze(this.value)">
+        <option value="">-- seleziona --</option>
+        ${uscite.map(u => `<option value="${u.id}" ${u.id === presenzeUscitaSel ? "selected" : ""}>${formattaDataUscita(u.data)}${u.ora ? " " + u.ora : ""} — ${u.titolo}</option>`).join("")}
+      </select>
+    </div>
+
+    ${!uscitaSel ? `
+      <div class="empty-state">Seleziona un'uscita per segnare i presenti.</div>
+    ` : atletiOrdinati.length === 0 ? `
+      <div class="empty-state">Nessun ciclista in anagrafica.</div>
+    ` : `
+      <div class="quota-card">
+        <div class="quota-card-title">Presenti — ${uscitaSel.titolo}</div>
+        ${atletiOrdinati.map(a => `
+          <div class="checkbox-row">
+            <input type="checkbox" id="presAtleta_${a.id}" ${presentiSel.has(a.id) ? "checked" : ""} onchange="togglePresenza('${a.id}')">
+            <label for="presAtleta_${a.id}" style="cursor:pointer;flex:1;">${a.cognome} ${a.nome}</label>
+          </div>
+        `).join("")}
+        <div class="small-note">${presentiSel.size} presenti su ${atletiOrdinati.length}</div>
+      </div>
+    `}
+
+    <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Classifica presenze</div>
+    ${classifica.length === 0 ? `
+      <div class="empty-state">Nessuna presenza registrata finora.</div>
+    ` : `
+      <div class="quota-card">
+        ${classifica.map((r, i) => `
+          <div class="persona-card-top" style="padding:8px 0;${i < classifica.length - 1 ? "border-bottom:1px solid var(--grigio-bordo);" : ""}">
+            <div class="persona-info-col">
+              <div class="persona-nome">${i + 1}. ${r.atleta.cognome} ${r.atleta.nome}</div>
+            </div>
+            <div class="badge">${r.count}</div>
+          </div>
+        `).join("")}
+      </div>
+    `}
+  `;
 }
 
 function popolaOraUscitaSelect(selected) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = "gestione-ciclismo-v141";
+const CACHE_NAME = "gestione-ciclismo-v161";
 const FILES_TO_CACHE = [
   "./index.html",
   "./styles.css",
