@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<title>Gestione Ciclismo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="styles.css">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- ===================== SCHERMATA "CHI SEI?" ===================== -->
+<div class="overlay open" id="nicknameGate" style="z-index:9999;">
+  <div class="overlay-header">
+    <h2>Chi sei?</h2>
+  </div>
+  <div class="overlay-body">
+    <p class="small-note" style="margin-top:0;">Inserisci il tuo nome per accedere ai dati della squadra.</p>
+    <div class="field-group required">
+      <label>Il tuo nome</label>
+      <input type="text" id="inpNickname" placeholder="Es. Marco" autocomplete="off">
+    </div>
+    <div class="action-row" style="margin-top:20px;">
+      <button class="btn btn-viola" onclick="confermaNickname()">Entra</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SCHERMATA DI CARICAMENTO ===================== -->
+<div class="overlay open" id="syncLoading" style="z-index:9998;">
+  <div class="overlay-body" style="text-align:center;margin-top:40vh;">
+    <p class="small-note">Connessione ai dati della squadra...</p>
+  </div>
+</div>
+
+<div id="app">
+
+  <div class="topbar">
+    <div class="logo" id="topLogo">GC</div>
+    <div class="team-name" id="topTeamName">Nome Squadra
+      <span class="app-version" id="topVersion"></span>
+    </div>
+    <button class="settings-btn" onclick="openSetup()">⚙️</button>
+  </div>
+
+  <div class="content" id="content"></div>
+
+  <div class="bottomnav" id="bottomnav"></div>
+
+  <!-- ===================== OVERLAY IMPOSTAZIONI ===================== -->
+  <div class="overlay" id="setupOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="closeSetup()">←</button>
+      <h2>Impostazioni</h2>
+    </div>
+    <div class="overlay-body">
+
+      <div class="field-group">
+        <label>Nome squadra</label>
+        <input type="text" id="inpTeamName" placeholder="Es. Gruppo Ciclistico ...">
+      </div>
+
+      <div class="field-group">
+        <label>Logo squadra</label>
+        <div class="logo-picker">
+          <div class="logo-preview" id="setupLogoPreview">Nessuno</div>
+          <label class="attach-btn" style="flex:1;text-align:center;">
+            📎 Carica logo
+            <input type="file" id="inpLogo" accept="image/*">
+          </label>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="field-group">
+        <label>Colore 1 (sfondo scuro / testo principale)</label>
+        <div class="color-picker-row">
+          <input type="color" id="inpColor1" value="#111111">
+          <span class="color-label">Default: nero</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Colore 2 (sfondo chiaro)</label>
+        <div class="color-picker-row">
+          <input type="color" id="inpColor2" value="#ffffff">
+          <span class="color-label">Default: bianco</span>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Colore 3 (accento / bordi leggeri)</label>
+        <div class="color-picker-row">
+          <input type="color" id="inpColor3" value="#7b2ff7">
+          <span class="color-label">Default: viola</span>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="field-group">
+        <label>Utenti abilitati</label>
+        <div class="chip-wrap" id="listaUtentiAbilitati"></div>
+        <div class="action-row" style="margin-top:10px;">
+          <input type="text" id="inpNuovoUtente" placeholder="Nome nuovo utente" style="flex:1;">
+          <button class="btn btn-outline" onclick="aggiungiUtenteAbilitato()">+ Aggiungi</button>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="field-group">
+        <label>Connesso come</label>
+        <div class="action-row" style="margin-top:6px;">
+          <span class="small-note" id="setupNicknameLabel" style="flex:1;"></span>
+          <button class="btn btn-outline" onclick="cambiaNickname()">Cambia nome</button>
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="action-row">
+        <button class="btn btn-outline" onclick="importaAnagrafica()">📥 Importa anagrafica</button>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-outline" onclick="fareBackup()">💾 Backup</button>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-outline" onclick="importaBackup()">📤 Importa backup</button>
+        <input type="file" id="inpBackupFile" accept="application/json">
+      </div>
+      <input type="file" id="inpAnagraficaFile" accept=".xlsx,.xls,.csv" style="display:none;">
+
+      <div class="action-row" style="margin-top:24px;">
+        <button class="btn btn-viola" onclick="salvaImpostazioni()">Salva impostazioni</button>
+      </div>
+
+      <p class="small-note">Versione app: <span id="appVersionLabel"></span></p>
+    </div>
+  </div>
+
+  <!-- ===================== OVERLAY FORM ANAGRAFICA ===================== -->
+  <div class="overlay" id="anagraficaOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="closeAnagraficaForm()">←</button>
+      <h2 id="anagraficaFormTitle">Nuovo Atleta</h2>
+    </div>
+    <div class="overlay-body">
+
+      <div class="field-row">
+        <div class="field-group required">
+          <label>Cognome</label>
+          <input type="text" id="fCognome">
+        </div>
+        <div class="field-group required">
+          <label>Nome</label>
+          <input type="text" id="fNome">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group" style="flex:0 0 38%;">
+          <label>Data di nascita</label>
+          <input type="text" id="fDataNascita" placeholder="gg/mm/aaaa">
+        </div>
+        <div class="field-group" style="flex:1;">
+          <label>Codice fiscale</label>
+          <input type="text" id="fCodiceFiscale">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group" style="flex:1;">
+          <label>Luogo di nascita</label>
+          <input type="text" id="fLuogoNascita">
+        </div>
+        <div class="field-group" style="flex:0 0 22%;">
+          <label>Prov. nascita</label>
+          <input type="text" id="fProvNascita" maxlength="2">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Residenza - Indirizzo</label>
+        <input type="text" id="fResidenza">
+      </div>
+
+      <div class="field-row">
+        <div class="field-group" style="flex:1;">
+          <label>Paese</label>
+          <input type="text" id="fPaese">
+        </div>
+        <div class="field-group" style="flex:0 0 18%;">
+          <label>Provincia</label>
+          <input type="text" id="fProvincia" maxlength="2">
+        </div>
+        <div class="field-group" style="flex:0 0 26%;">
+          <label>CAP</label>
+          <input type="text" id="fCap" maxlength="5">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label>Telefono</label>
+          <input type="text" id="fTelefono">
+        </div>
+        <div class="field-group">
+          <label>Cellulare</label>
+          <input type="text" id="fCellulare">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Email</label>
+        <input type="email" id="fEmail">
+      </div>
+
+      <div class="field-row" style="margin-bottom:14px;">
+        <div class="checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="fSms"><label for="fSms" style="margin:0;">SMS</label>
+        </div>
+        <div class="checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="fWhatsapp"><label for="fWhatsapp" style="margin:0;">WhatsApp</label>
+        </div>
+      </div>
+
+      <div class="check-attach-row">
+        <div class="checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="fPrivacy"><label for="fPrivacy" style="margin:0;">🔒 Privacy</label>
+        </div>
+        <div class="attach-inline">
+          <span class="attach-status" id="fPrivacyDocStatus">Nessuno</span>
+          <button type="button" class="attach-btn" onclick="document.getElementById('fPrivacyDoc').click()">📎 Allega</button>
+        </div>
+        <input type="file" id="fPrivacyDoc" accept="image/*,application/pdf">
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="field-row fed-tess-cat-row">
+        <div class="field-group" style="flex:0 0 30%;">
+          <label>Federazione</label>
+          <select id="fFederazione">
+            <option value="">-</option>
+            <option value="ACSI">ACSI</option>
+            <option value="CSI">CSI</option>
+            <option value="FCI">FCI</option>
+          </select>
+        </div>
+        <div class="field-group" style="flex:1;">
+          <label>Nr. tessera</label>
+          <input type="text" id="fNrTessera">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group" style="flex:0 0 26%;">
+          <label>Data tess.</label>
+          <input type="text" id="fDataTesseramento" placeholder="gg/mm/aaaa">
+        </div>
+        <div class="field-group" style="flex:1;">
+          <label>Categoria</label>
+          <select id="fCategoria"></select>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Soprannome</label>
+        <input type="text" id="fSoprannome">
+      </div>
+
+      <hr class="section-divider">
+
+      <div class="check-attach-row">
+        <div class="checkbox-row" style="margin-bottom:0;">
+          <input type="checkbox" id="fVisitaMedica"><label for="fVisitaMedica" style="margin:0;">🩺 Visita</label>
+        </div>
+        <div class="attach-inline">
+          <span class="attach-status" id="fVisitaDocStatus">Nessuno</span>
+          <button type="button" class="attach-btn" onclick="document.getElementById('fVisitaDoc').click()">📎 Allega</button>
+        </div>
+        <input type="file" id="fVisitaDoc" accept="image/*,application/pdf">
+      </div>
+      <div class="field-row data-visita-row">
+        <div class="field-group">
+          <label>Data visita</label>
+          <input type="text" id="fDataVisita" placeholder="gg/mm/aaaa">
+        </div>
+        <div class="field-group">
+          <label>Scadenza visita</label>
+          <input type="text" id="fScadenzaVisita" placeholder="gg/mm/aaaa">
+        </div>
+      </div>
+
+      <hr class="section-divider">
+
+      <label style="display:block;font-size:13px;font-weight:700;margin-bottom:10px;">Abbigliamento estivo</label>
+      <div class="field-row taglie-row">
+        <div class="field-group">
+          <label>Maglia</label>
+          <input type="text" id="fTagliaMagliaEstiva" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Pant.</label>
+          <input type="text" id="fTagliaPantEstivo" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Smanicato</label>
+          <input type="text" id="fTagliaSmanicato" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Antiacqua</label>
+          <input type="text" id="fTagliaAntiacqua" maxlength="4">
+        </div>
+      </div>
+
+      <label style="display:block;font-size:13px;font-weight:700;margin:16px 0 10px;">Abbigliamento Invernale</label>
+      <div class="field-row taglie-row">
+        <div class="field-group">
+          <label>Maglia M. Lunghe</label>
+          <input type="text" id="fTagliaMagliaInvernale" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Pant. Lunghi</label>
+          <input type="text" id="fTagliaPantLunghi" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Giubbino</label>
+          <input type="text" id="fTagliaGiubbino" maxlength="4">
+        </div>
+      </div>
+
+      <div class="field-row taglie-row" style="margin-top:16px;">
+        <div class="field-group">
+          <label>Calze</label>
+          <input type="text" id="fTagliaCalze" maxlength="4">
+        </div>
+        <div class="field-group">
+          <label>Guanti</label>
+          <input type="text" id="fTagliaGuanti" maxlength="4">
+        </div>
+      </div>
+
+      <div class="field-group" style="margin-top:16px;">
+        <label>Note</label>
+        <textarea id="fNote" rows="3" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+
+      <div id="storicoQuoteBlock" style="display:none;margin-top:20px;">
+        <hr class="section-divider">
+        <label style="display:block;font-size:13px;font-weight:700;margin-bottom:10px;">📋 Storico Quote</label>
+        <div id="storicoQuoteTabella"></div>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn btn-viola" onclick="salvaAtleta()">Salva atleta</button>
+      </div>
+      <div class="action-row" id="eliminaAtletaRow" style="display:none;">
+        <button class="btn btn-danger" onclick="eliminaAtleta()">🗑️ Elimina atleta</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ===================== OVERLAY FORM GARA ===================== -->
+  <div class="overlay" id="garaOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="closeGaraForm()">←</button>
+      <h2 id="garaFormTitle">Nuova Gara</h2>
+    </div>
+    <div class="overlay-body">
+
+      <div class="field-group required">
+        <label>Nome Gara</label>
+        <input type="text" id="fGaraNome">
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label>Data</label>
+          <input type="text" id="fGaraData" placeholder="gg/mm/aaaa">
+        </div>
+        <div class="field-group">
+          <label>Luogo</label>
+          <input type="text" id="fGaraLuogo">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Circuito</label>
+        <select id="fGaraCircuito"></select>
+      </div>
+
+      <div class="field-group">
+        <label>Descrizione evento</label>
+        <textarea id="fGaraDescrizione" rows="4" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn btn-viola" onclick="salvaGara()">Salva gara</button>
+      </div>
+      <div class="action-row" id="eliminaGaraRow" style="display:none;">
+        <button class="btn btn-danger" onclick="eliminaGaraCorrente()">🗑️ Elimina gara</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ===================== OVERLAY FORM SPONSOR ===================== -->
+  <div class="overlay" id="sponsorOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="closeSponsorForm()">←</button>
+      <h2 id="sponsorFormTitle">Nuovo Sponsor</h2>
+    </div>
+    <div class="overlay-body">
+
+      <div class="field-group required">
+        <label>Nome società</label>
+        <input type="text" id="fSponsorNome">
+      </div>
+
+      <div class="field-group">
+        <label>Indirizzo</label>
+        <input type="text" id="fSponsorIndirizzo">
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label>Paese</label>
+          <input type="text" id="fSponsorPaese">
+        </div>
+        <div class="field-group" style="flex:0 0 22%;">
+          <label>Provincia</label>
+          <input type="text" id="fSponsorProvincia" maxlength="2">
+        </div>
+        <div class="field-group" style="flex:0 0 28%;">
+          <label>CAP</label>
+          <input type="text" id="fSponsorCap" maxlength="5">
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Persona di riferimento</label>
+        <input type="text" id="fSponsorReferente">
+      </div>
+
+      <div class="field-group">
+        <label>Email</label>
+        <input type="email" id="fSponsorEmail">
+      </div>
+
+      <div class="field-group">
+        <label>Note</label>
+        <textarea id="fSponsorNote" rows="3" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn btn-viola" onclick="salvaSponsor()">Salva sponsor</button>
+      </div>
+      <div class="action-row" id="eliminaSponsorRow" style="display:none;">
+        <button class="btn btn-danger" onclick="eliminaSponsorCorrente()">🗑️ Elimina sponsor</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ===================== OVERLAY FORM USCITA ===================== -->
+  <div class="overlay" id="uscitaOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="closeUscitaForm()">←</button>
+      <h2 id="uscitaFormTitle">Nuova Uscita</h2>
+    </div>
+    <div class="overlay-body">
+
+      <div class="field-row">
+        <div class="field-group">
+          <label>Data</label>
+          <input type="date" id="fUscitaData">
+        </div>
+        <div class="field-group" style="flex:0 0 35%;">
+          <label>Ora</label>
+          <select id="fUscitaOra"></select>
+        </div>
+      </div>
+
+      <div class="field-group required">
+        <label>Titolo uscita</label>
+        <input type="text" id="fUscitaTitolo">
+      </div>
+
+      <div class="field-group">
+        <label>Km indicativi</label>
+        <input type="number" id="fUscitaKm" min="0" step="1" placeholder="Es. 60">
+      </div>
+
+      <div class="field-group">
+        <label>Descrizione</label>
+        <textarea id="fUscitaDescrizione" rows="4" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+
+      <div class="action-row" style="margin-top:20px;">
+        <button class="btn btn-viola" onclick="salvaUscita()">Salva uscita</button>
+      </div>
+      <div class="action-row" id="eliminaUscitaRow" style="display:none;">
+        <button class="btn btn-danger" onclick="eliminaUscitaCorrente()">🗑️ Elimina uscita</button>
+      </div>
+
+    </div>
+  </div>
+  <!-- ===================== OVERLAY ANTEPRIMA CREA USCITE ===================== -->
+  <div class="overlay" id="anteprimaUsciteOverlay">
+    <div class="overlay-header">
+      <button class="back-btn" onclick="chiudiAnteprimaUscite()">←</button>
+      <h2 id="anteprimaUsciteTitle">Anteprima uscite</h2>
+    </div>
+    <div class="overlay-body">
+      <div id="anteprimaUsciteBody"></div>
+      <div class="action-row" style="margin-top:10px;">
+        <button class="btn btn-viola" onclick="confermaCreaUscite()">✅ Conferma e crea uscite</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="updateBanner">
+  <span>🔄 Nuova versione disponibile</span>
+  <button onclick="applicaAggiornamento()">Aggiorna</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
