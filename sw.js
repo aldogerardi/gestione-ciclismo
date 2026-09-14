@@ -1,4 +1,4 @@
-const CACHE_NAME = "gestione-ciclismo-v162";
+const CACHE_NAME = "gestione-ciclismo-v163";
 const FILES_TO_CACHE = [
   "./index.html",
   "./styles.css",
@@ -10,7 +10,13 @@ const FILES_TO_CACHE = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(FILES_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        FILES_TO_CACHE.map((url) =>
+          fetch(url, { cache: "reload" }).then((response) => cache.put(url, response))
+        )
+      )
+    )
   );
   // NIENTE skipWaiting qui: il nuovo service worker resta "in attesa"
   // finché l'utente non conferma dal banner "Nuova versione disponibile".
@@ -36,7 +42,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
+      const fetchPromise = fetch(event.request, { cache: "no-store" })
         .then((networkResponse) => {
           if (event.request.method === "GET" && networkResponse.ok) {
             caches.open(CACHE_NAME).then((cache) => {

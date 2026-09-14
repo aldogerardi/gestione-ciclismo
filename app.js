@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.62";
+const APP_VERSION = "1.63";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1651,7 +1651,7 @@ function applicaAggiornamento() {
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").then((reg) => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
       // caso 1: un aggiornamento era già pronto e in attesa prima ancora di aprire l'app
       if (reg.waiting) {
         mostraBannerAggiornamento(reg.waiting);
