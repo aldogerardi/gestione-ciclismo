@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.61";
+const APP_VERSION = "1.62";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1253,7 +1253,12 @@ function togglePresenza(atletaId) {
   } else {
     u.presenti.push(atletaId);
   }
+  render();
+}
+
+function salvaPresenze() {
   saveState();
+  presenzeUscitaSel = "";
   render();
 }
 
@@ -1278,7 +1283,6 @@ function renderPresenzeSection(content) {
   }));
   const classifica = atletiOrdinati
     .map(a => ({ atleta: a, count: conteggio[a.id] || 0 }))
-    .filter(r => r.count > 0)
     .sort((a, b) => b.count - a.count || (a.atleta.cognome + a.atleta.nome).localeCompare(b.atleta.cognome + b.atleta.nome));
 
   content.innerHTML = `
@@ -1306,12 +1310,15 @@ function renderPresenzeSection(content) {
           </div>
         `).join("")}
         <div class="small-note">${presentiSel.size} presenti su ${atletiOrdinati.length}</div>
+        <div class="action-row" style="margin-top:14px;">
+          <button class="btn btn-viola" onclick="salvaPresenze()">💾 Salva presenze</button>
+        </div>
       </div>
     `}
 
     <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Classifica presenze</div>
     ${classifica.length === 0 ? `
-      <div class="empty-state">Nessuna presenza registrata finora.</div>
+      <div class="empty-state">Nessun ciclista in anagrafica.</div>
     ` : `
       <div class="quota-card">
         ${classifica.map((r, i) => `
