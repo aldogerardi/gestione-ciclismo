@@ -46,6 +46,7 @@
     <div class="logo" id="topLogo">GC</div>
     <div class="team-name" id="topTeamName">Nome Squadra
       <span class="app-version" id="topVersion"></span>
+      <span class="app-version" id="topUtente"></span>
     </div>
     <button class="settings-btn" onclick="openSetup()">⚙️</button>
   </div>
@@ -120,6 +121,9 @@
         <div class="action-row" style="margin-top:6px;">
           <span class="small-note" id="setupNicknameLabel" style="flex:1;"></span>
           <button class="btn btn-outline" onclick="cambiaNickname()">Cambia nome</button>
+        </div>
+        <div class="action-row" style="margin-top:8px;">
+          <button class="btn btn-danger" onclick="disconnettiUtente()">🔓 Disconnetti</button>
         </div>
       </div>
 

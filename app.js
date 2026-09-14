@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.64";
+const APP_VERSION = "1.65";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -116,11 +116,20 @@ function confermaNickname() {
   }
   localStorage.setItem(NICKNAME_KEY, val);
   document.getElementById("nicknameGate").classList.remove("open");
+  if (statoCaricato) render();
 }
 
 function cambiaNickname() {
   closeSetup();
   document.getElementById("inpNickname").value = getNickname();
+  document.getElementById("nicknameGate").classList.add("open");
+}
+
+function disconnettiUtente() {
+  if (!confirm("Vuoi disconnetterti? Dovrai reinserire il tuo nome per accedere di nuovo.")) return;
+  localStorage.removeItem(NICKNAME_KEY);
+  closeSetup();
+  document.getElementById("inpNickname").value = "";
   document.getElementById("nicknameGate").classList.add("open");
 }
 
@@ -243,6 +252,7 @@ function applicaColori() {
 function renderTopbar() {
   document.getElementById("topTeamName").firstChild.textContent = (state.settings.teamName || "Nome Squadra") + " ";
   document.getElementById("topVersion").textContent = "v" + APP_VERSION;
+  document.getElementById("topUtente").textContent = getNickname() ? "👤 " + getNickname() : "";
   const logoEl = document.getElementById("topLogo");
   if (state.settings.logo) {
     logoEl.innerHTML = `<img src="${state.settings.logo}">`;
