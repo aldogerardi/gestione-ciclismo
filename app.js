@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.65";
+const APP_VERSION = "1.66";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1659,6 +1659,16 @@ function ricaricaUnaVolta() {
 function mostraBannerAggiornamento(worker) {
   nuovoWorkerInAttesa = worker;
   document.getElementById("updateBanner").classList.add("show");
+  fetch("app.js?ts=" + Date.now(), { cache: "no-store" })
+    .then((r) => r.text())
+    .then((testo) => {
+      const match = testo.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+      if (match) {
+        document.getElementById("updateBannerText").textContent =
+          `🔄 Aggiornamento disponibile: v${APP_VERSION} → v${match[1]}`;
+      }
+    })
+    .catch(() => {});
 }
 
 function applicaAggiornamento() {
