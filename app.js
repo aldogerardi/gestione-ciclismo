@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "2.07";
+const APP_VERSION = "2.08";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1556,13 +1556,15 @@ PRESENTE"></textarea>
             <div class="persona-nome">${c.titolo ? escHtml(c.titolo) : "Cena"}</div>
             <div class="persona-sub">${formattaDataInvito(c.data)}${c.ora ? " · " + c.ora : ""}${c.luogo ? " · " + escHtml(c.luogo) : ""}</div>
           </div>
-          <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaCena('${c.id}')">🗑️</button>
+          <div class="persona-actions">
+            <button onclick="eliminaCena('${c.id}')">🗑️</button>
+          </div>
         </div>
         <div class="small-note" data-tally="${c.id}" style="margin-top:8px;">Caricamento risposte...</div>
-        <div class="action-row" style="margin-top:10px;flex-wrap:wrap;">
-          <button class="btn btn-outline" onclick="copiaLinkCena('${c.id}')">🔗 Copia link</button>
-          <button class="btn" style="background:#25D366;color:#fff;" onclick="inviaCenaWhatsapp('${c.id}')">📲 Invia su WhatsApp</button>
-          <button class="btn btn-outline" onclick="apriReportCena('${c.id}')">📋 Report nomi</button>
+        <div class="action-row" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline" style="flex:1;min-width:110px;" onclick="copiaLinkCena('${c.id}')">🔗 Copia link</button>
+          <button class="btn" style="flex:1;min-width:110px;background:#25D366;color:#fff;" onclick="inviaCenaWhatsapp('${c.id}')">📲 WhatsApp</button>
+          <button class="btn btn-outline" style="flex:1;min-width:110px;" onclick="apriReportCena('${c.id}')">📋 Report nomi</button>
         </div>
       </div>
     `).join("")}
