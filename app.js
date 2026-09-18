@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "2.06";
+const APP_VERSION = "2.07";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -29,7 +29,7 @@ const SEZIONI = [
   { id: "abbigliamento", nome: "Abbigliamento", icona: "👕" },
   { id: "uscite", nome: "Uscite gruppo", icona: "🚴" },
   { id: "presenze", nome: "Presenze", icona: "✅" },
-  { id: "inviti", nome: "Inviti", icona: "📩" },
+  { id: "cena", nome: "Cena", icona: "🍽️" },
   { id: "gare", nome: "Gare", icona: "🏁" },
   { id: "circuiti", nome: "Circuiti", icona: "🗺️" },
   { id: "report", nome: "Report", icona: "📊" },
@@ -75,7 +75,7 @@ function defaultState() {
     gare: [],
     sponsor: [],
     uscite: [],
-    inviti: [],
+    cene: [],
   };
 }
 
@@ -89,7 +89,7 @@ function normalizzaStato(parsed) {
     gare: parsed.gare || [],
     sponsor: parsed.sponsor || [],
     uscite: parsed.uscite || [],
-    inviti: parsed.inviti || [],
+    cene: parsed.cene || [],
   };
 }
 
@@ -356,8 +356,8 @@ function renderContent() {
     renderPresenzeSection(content);
     return;
   }
-  if (currentSection === "inviti") {
-    renderInvitiSection(content);
+  if (currentSection === "cena") {
+    renderCenaSection(content);
     return;
   }
   if (currentSection === "abbigliamento") {
@@ -1351,17 +1351,11 @@ function renderPresenzeSection(content) {
   `;
 }
 
-/* ===================== SEZIONE INVITI (CENE/EVENTI) ===================== */
-function popolaOraInvitoSelect(selected) {
-  const sel = document.getElementById("fInvitoOra");
-  let opts = `<option value="">-</option>`;
-  for (let h = 0; h < 24; h++) {
-    ["00", "30"].forEach(m => {
-      const val = String(h).padStart(2, "0") + ":" + m;
-      opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
-    });
-  }
-  sel.innerHTML = opts;
+/* ===================== SEZIONE CENA ===================== */
+function escHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s == null ? "" : String(s);
+  return div.innerHTML;
 }
 
 function formattaDataInvito(iso) {
@@ -1370,13 +1364,22 @@ function formattaDataInvito(iso) {
   return `${d}/${m}/${y}`;
 }
 
-function linkInvito(id) {
-  const base = location.origin + location.pathname.substring(0, location.pathname.lastIndexOf("/") + 1);
-  return base + "invito.html?id=" + id;
+function generaOreOptions(selected) {
+  let opts = "";
+  for (let h = 0; h < 24; h++) {
+    const val = String(h).padStart(2, "0");
+    opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
+  }
+  return opts;
 }
 
-function copiaLinkInvito(id) {
-  const link = linkInvito(id);
+function linkCena(cenaId) {
+  const base = location.origin + location.pathname;
+  return `${base}?cena=${cenaId}`;
+}
+
+function copiaLinkCena(id) {
+  const link = linkCena(id);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link).then(() => alert("Link copiato!")).catch(() => alert(link));
   } else {
@@ -1384,148 +1387,272 @@ function copiaLinkInvito(id) {
   }
 }
 
-function inviaInvito() {
-  const testo = document.getElementById("fInvitoTesto").value.trim();
-  const data = document.getElementById("fInvitoData").value;
-  const ora = document.getElementById("fInvitoOra").value;
+function creaCena() {
+  const titolo = document.getElementById("cenaTitolo").value.trim();
+  const data = document.getElementById("cenaData").value;
+  const h = document.getElementById("cenaOraH").value;
+  const m = document.getElementById("cenaOraM").value || "00";
+  const luogo = document.getElementById("cenaLuogo").value.trim();
+  const testo = document.getElementById("cenaTesto").value.trim();
 
-  if (!testo) {
-    alert("Scrivi il testo dell'invito.");
+  if (!data) {
+    alert("Inserisci la data della cena.");
     return;
   }
 
-  const invito = {
-    id: uid(),
-    data,
-    ora,
-    testo,
-    inviatoIl: new Date().toISOString(),
-  };
-  state.inviti.unshift(invito);
+  const id = uid();
+  const ora = h ? `${h}:${m}` : "";
+  const nuova = { id, titolo, data, ora, luogo, testo };
+  state.cene.push(nuova);
   saveState();
 
-  let messaggio = testo;
-  if (data || ora) {
-    messaggio += "\n\n";
-    if (data) messaggio += `📅 ${formattaDataInvito(data)}`;
-    if (data && ora) messaggio += "   ";
-    if (ora) messaggio += `🕐 ${ora}`;
+  db.collection("cene").doc(id).set({ titolo, data, ora, luogo, testo, risposte: {} }).catch((e) => {
+    console.error(e);
+    alert("La cena è stata creata ma c'è stato un problema nel predisporre il link su Firebase. Riprova a crearla se il link non dovesse funzionare.");
+  });
+
+  document.getElementById("cenaTitolo").value = "";
+  document.getElementById("cenaData").value = "";
+  document.getElementById("cenaLuogo").value = "";
+  document.getElementById("cenaTesto").value = "";
+  render();
+}
+
+function eliminaCena(id) {
+  if (!confirm("Eliminare questa cena e tutte le risposte ricevute?")) return;
+  state.cene = state.cene.filter(c => c.id !== id);
+  saveState();
+  db.collection("cene").doc(id).delete().catch((e) => console.error(e));
+  delete tallyCenaCache[id];
+  render();
+}
+
+function inviaCenaWhatsapp(id) {
+  const c = state.cene.find(x => x.id === id);
+  if (!c) return;
+  const link = linkCena(c.id);
+  const baseTesto = c.testo || "Ciao a tutti! Se vuoi essere dei nostri clicca qua sotto:\nPRESENTE";
+  const righe = baseTesto.split("\n");
+  const ultima = righe[righe.length - 1].trim();
+  let corpo;
+  if (/^presente$/i.test(ultima)) {
+    righe[righe.length - 1] = `${ultima.toUpperCase()} 👉 ${link}`;
+    corpo = righe.join("\n");
+  } else {
+    corpo = `${baseTesto}\n${link}`;
   }
-  messaggio += "\n\n👉 Confermate qui la presenza (con eventuali ospiti):\n" + linkInvito(invito.id);
-
-  window.open("https://wa.me/?text=" + encodeURIComponent(messaggio), "_blank");
-
-  document.getElementById("fInvitoTesto").value = "";
-  document.getElementById("fInvitoData").value = "";
-  render();
+  const intestazione = [];
+  if (c.titolo) intestazione.push(`🍽️ *${c.titolo}*`, "");
+  if (c.data) intestazione.push(`📅 ${formattaDataInvito(c.data)}`);
+  if (c.ora) intestazione.push(`🕐 ${c.ora}`);
+  if (c.luogo) intestazione.push(`📍 ${c.luogo}`);
+  if (intestazione.length) intestazione.push("");
+  const testo = intestazione.join("\n") + corpo;
+  window.open("https://wa.me/?text=" + encodeURIComponent(testo), "_blank");
 }
 
-function eliminaInvito(id) {
-  if (!confirm("Eliminare questo invito dallo storico? (le eventuali risposte già ricevute resteranno su Firebase ma non saranno più visibili da qui)")) return;
-  state.inviti = state.inviti.filter(i => i.id !== id);
-  saveState();
-  render();
-}
+let tallyCenaCache = {};
 
-let risposteInvitiCache = {};
-
-function caricaRisposteInvito(id) {
-  risposteInvitiCache[id] = { loading: true };
-  render();
-  db.collection("invitiRisposte").doc(id).collection("risposte").get()
-    .then((snap) => {
-      const risposte = snap.docs.map((d) => d.data());
-      risposte.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
-      risposteInvitiCache[id] = { loading: false, risposte };
-      render();
+function caricaTallyCena(id) {
+  db.collection("cene").doc(id).get()
+    .then((doc) => {
+      const risposte = doc.exists ? (doc.data().risposte || {}) : {};
+      const totale = Object.values(risposte).reduce((sum, r) => sum + (r.persone || 1), 0);
+      tallyCenaCache[id] = totale;
+      const el = document.querySelector(`[data-tally="${id}"]`);
+      if (el) el.innerHTML = totale > 0 ? `✅ <strong>${totale}</strong> persone confermate` : "Nessuna conferma ancora";
     })
     .catch((e) => {
       console.error(e);
-      risposteInvitiCache[id] = { loading: false, errore: true };
-      render();
+      const el = document.querySelector(`[data-tally="${id}"]`);
+      if (el) el.textContent = "Errore nel caricamento delle conferme";
     });
 }
 
-function nascondiRisposteInvito(id) {
-  delete risposteInvitiCache[id];
-  render();
+function showModal(html) {
+  document.getElementById("genericModalBox").innerHTML = html;
+  document.getElementById("genericModal").classList.add("show");
 }
 
-function renderInvitiSection(content) {
-  const storico = [...state.inviti].sort((a, b) => (b.inviatoIl || "").localeCompare(a.inviatoIl || ""));
+function closeModal() {
+  document.getElementById("genericModal").classList.remove("show");
+}
+
+function apriReportCena(id) {
+  const c = state.cene.find(x => x.id === id);
+  showModal(`<div style="text-align:center;padding:30px 0;">Caricamento report...</div>`);
+  db.collection("cene").doc(id).get()
+    .then((doc) => {
+      const risposte = doc.exists ? (doc.data().risposte || {}) : {};
+      const elenco = Object.values(risposte).sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+      const totale = elenco.reduce((sum, r) => sum + (r.persone || 1), 0);
+      const righeHtml = elenco.length
+        ? elenco.map(r => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--grigio-bordo);"><span>${escHtml(r.nome || "Anonimo")}</span><strong>${r.persone || 1}</strong></div>`).join("")
+        : `<div class="empty-state">Nessuna conferma ancora.</div>`;
+      showModal(`
+        <div style="font-weight:800;margin-bottom:2px;">📋 Report presenze</div>
+        <div class="small-note" style="margin-bottom:14px;">${escHtml(c ? (c.titolo || "Cena") : "Cena")}</div>
+        <div style="font-weight:800;font-size:1.2rem;color:var(--c3);margin-bottom:10px;">Totale: ${totale} persone</div>
+        <div>${righeHtml}</div>
+        <div class="action-row" style="margin-top:16px;">
+          <button class="btn btn-outline" style="flex:1;" onclick="closeModal()">Chiudi</button>
+        </div>
+      `);
+    })
+    .catch((e) => {
+      console.error(e);
+      showModal(`<div class="empty-state">Errore nel caricamento del report.</div><div class="action-row" style="margin-top:12px;"><button class="btn btn-outline" style="flex:1;" onclick="closeModal()">Chiudi</button></div>`);
+    });
+}
+
+function renderCenaSection(content) {
+  const cene = [...state.cene].sort((a, b) => (b.data || "").localeCompare(a.data || ""));
 
   content.innerHTML = `
-    <div class="section-title"><span class="dot"></span>Inviti cene / eventi</div>
+    <div class="section-title"><span class="dot"></span>Cena</div>
+    <p class="small-note" style="margin-top:0;">Crea l'evento, scrivi il messaggio, poi invia su WhatsApp: il link per confermare la presenza (nome + quante persone) viene aggiunto in automatico. Le risposte arrivano qui.</p>
 
     <div class="quota-card">
-      <div class="field-group required">
-        <label>Testo invito</label>
-        <textarea id="fInvitoTesto" rows="5" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;" placeholder="Es. Ciao a tutti, vi aspettiamo per la cena sociale del gruppo..."></textarea>
+      <div class="field-group">
+        <label>Titolo</label>
+        <input type="text" id="cenaTitolo" placeholder="Es. Cena di fine stagione">
       </div>
-
       <div class="field-row">
-        <div class="field-group">
+        <div class="field-group required">
           <label>Data</label>
-          <input type="date" id="fInvitoData">
+          <input type="date" id="cenaData">
         </div>
         <div class="field-group">
           <label>Ora</label>
-          <select id="fInvitoOra"></select>
+          <div style="display:flex;gap:6px;">
+            <select id="cenaOraH" style="flex:1;"><option value="">--</option>${generaOreOptions("")}</select>
+            <select id="cenaOraM" style="flex:1;"><option value="00">:00</option><option value="30">:30</option></select>
+          </div>
         </div>
       </div>
-
-      <div class="action-row" style="margin-top:14px;">
-        <button class="btn btn-viola" onclick="inviaInvito()">📲 Invia su WhatsApp</button>
+      <div class="field-group">
+        <label>Luogo</label>
+        <input type="text" id="cenaLuogo" placeholder="Es. Ristorante / sede del gruppo">
       </div>
-      <p class="small-note">Nel messaggio verrà incluso anche un link dove chi risponde può indicare il proprio nome e quante persone porta.</p>
+      <div class="field-group">
+        <label>Testo del messaggio</label>
+        <textarea id="cenaTesto" rows="5" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;" placeholder="Scrivi qui il messaggio da mandare nel gruppo...
+Se vuoi essere dei nostri clicca qua sotto:
+PRESENTE"></textarea>
+        <div class="small-note">Se l'ultima riga è la parola "PRESENTE", il link viene attaccato lì (es. "PRESENTE 👉 link"). Altrimenti viene aggiunto su una riga nuova in fondo.</div>
+      </div>
+      <div class="action-row" style="margin-top:10px;">
+        <button class="btn btn-viola" onclick="creaCena()">➕ Crea e genera link</button>
+      </div>
     </div>
 
-    <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Storico inviti</div>
-    ${storico.length === 0 ? `
-      <div class="empty-state">Nessun invito inviato finora.</div>
-    ` : storico.map(i => {
-      const cache = risposteInvitiCache[i.id];
-      const totalePersone = cache && cache.risposte ? cache.risposte.reduce((s, r) => s + (r.persone || 1), 0) : null;
-      return `
+    <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Cene create</div>
+    ${cene.length === 0 ? `
+      <div class="empty-state">Nessuna cena creata finora.</div>
+    ` : cene.map(c => `
       <div class="quota-card" style="margin-bottom:12px;">
         <div class="persona-card-top" style="align-items:flex-start;">
           <div class="persona-info-col">
-            <div class="persona-nome">${i.data ? formattaDataInvito(i.data) : ""}${i.ora ? " · " + i.ora : ""}</div>
-            <div class="persona-sub" style="white-space:pre-wrap;">${i.testo}</div>
+            <div class="persona-nome">${c.titolo ? escHtml(c.titolo) : "Cena"}</div>
+            <div class="persona-sub">${formattaDataInvito(c.data)}${c.ora ? " · " + c.ora : ""}${c.luogo ? " · " + escHtml(c.luogo) : ""}</div>
           </div>
-          <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaInvito('${i.id}')">🗑️</button>
+          <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaCena('${c.id}')">🗑️</button>
         </div>
-
-        <div class="action-row" style="margin-top:10px;">
-          <button class="btn btn-outline" onclick="copiaLinkInvito('${i.id}')">🔗 Copia link</button>
-          ${cache ? `
-            <button class="btn btn-outline" onclick="nascondiRisposteInvito('${i.id}')">Nascondi risposte</button>
-          ` : `
-            <button class="btn btn-outline" onclick="caricaRisposteInvito('${i.id}')">📋 Vedi risposte</button>
-          `}
+        <div class="small-note" data-tally="${c.id}" style="margin-top:8px;">Caricamento risposte...</div>
+        <div class="action-row" style="margin-top:10px;flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="copiaLinkCena('${c.id}')">🔗 Copia link</button>
+          <button class="btn" style="background:#25D366;color:#fff;" onclick="inviaCenaWhatsapp('${c.id}')">📲 Invia su WhatsApp</button>
+          <button class="btn btn-outline" onclick="apriReportCena('${c.id}')">📋 Report nomi</button>
         </div>
-
-        ${cache && cache.loading ? `<p class="small-note">Caricamento risposte...</p>` : ""}
-        ${cache && cache.errore ? `<p class="small-note">Errore nel caricamento delle risposte.</p>` : ""}
-        ${cache && cache.risposte ? `
-          ${cache.risposte.length === 0 ? `
-            <p class="small-note">Nessuna risposta ricevuta finora.</p>
-          ` : `
-            <div class="small-note" style="font-weight:700;margin-top:8px;">Totale confermati: ${totalePersone}</div>
-            ${cache.risposte.map(r => `
-              <div class="checkbox-row" style="justify-content:space-between;">
-                <span>${r.nome}</span>
-                <span class="badge">${r.persone || 1}</span>
-              </div>
-            `).join("")}
-          `}
-        ` : ""}
       </div>
-    `;
-    }).join("")}
+    `).join("")}
   `;
 
-  popolaOraInvitoSelect("");
+  cene.forEach(c => caricaTallyCena(c.id));
+}
+
+/* ---------- Pagina pubblica di conferma Cena (nome + numero persone, senza login) ---------- */
+function getRespIdDispositivo() {
+  const key = "gestione_ciclismo_resp_id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = uid();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+function renderCenaRisposta(cenaId) {
+  document.body.innerHTML = `<div id="cenaRispostaRoot" style="max-width:420px;margin:0 auto;padding:24px 16px;text-align:center;"></div>`;
+  const root = document.getElementById("cenaRispostaRoot");
+  root.innerHTML = `<div style="padding-top:40px;">Caricamento...</div>`;
+
+  firebase.auth().signInAnonymously().catch((e) => {
+    console.error(e);
+    root.innerHTML = `<div style="padding-top:40px;">⚠️ Impossibile collegarsi, controlla la connessione e riapri il link.</div>`;
+  });
+
+  firebase.auth().onAuthStateChanged((user) => {
+    if (!user) return;
+    db.collection("cene").doc(cenaId).get().then((doc) => {
+      if (!doc.exists) {
+        root.innerHTML = `<div style="padding-top:40px;">Questo invito non è più valido.</div>`;
+        return;
+      }
+      const c = doc.data();
+      const intestazione = `
+        <div style="margin-bottom:18px;">
+          <div style="font-weight:900;font-size:1.3rem;color:var(--c3);">🍽️ ${escHtml(c.titolo || "Cena")}</div>
+          ${(c.data || c.ora || c.luogo) ? `<div style="color:#555;margin-top:4px;">${c.data ? formattaDataInvito(c.data) : ""}${c.ora ? " ore " + escHtml(c.ora) : ""}${c.luogo ? " - " + escHtml(c.luogo) : ""}</div>` : ""}
+          ${c.testo ? `<div style="color:#333;margin-top:10px;white-space:pre-wrap;text-align:left;background:var(--grigio);border-radius:8px;padding:10px;">${escHtml(c.testo)}</div>` : ""}
+        </div>`;
+
+      const respId = getRespIdDispositivo();
+      const precedente = (c.risposte || {})[respId];
+
+      const disegnaForm = (nomeIniziale, valoreIniziale) => {
+        root.innerHTML = `
+          ${intestazione}
+          ${precedente ? `<div style="color:var(--c3);font-weight:700;margin-bottom:14px;">Avevi confermato: ${escHtml(precedente.nome)}, in totale ${precedente.persone}. Puoi correggere qui sotto.</div>` : ""}
+          <div class="field-group" style="text-align:left;">
+            <label>Il tuo nome</label>
+            <input type="text" id="crNome" placeholder="Nome e cognome" value="${escHtml(nomeIniziale)}">
+          </div>
+          <div style="margin:14px 0 2px;color:#555;">In quanti sarete in totale (te compreso)?</div>
+          <div class="small-note" style="margin-bottom:8px;">Es. tu + 3 amici = imposta 4</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
+            <button type="button" id="crMeno" style="width:52px;height:52px;font-size:1.6rem;font-weight:800;border-radius:50%;border:none;background:var(--grigio);">−</button>
+            <div id="crNumero" style="font-size:2.2rem;font-weight:900;min-width:50px;">${valoreIniziale}</div>
+            <button type="button" id="crPiu" style="width:52px;height:52px;font-size:1.6rem;font-weight:800;border-radius:50%;border:none;background:var(--grigio);">+</button>
+          </div>
+          <button type="button" id="crConferma" class="btn btn-viola" style="width:100%;margin-top:22px;padding:14px;font-size:1.05rem;">✅ Conferma presenza</button>
+          <div id="crMsg" class="small-note" style="margin-top:14px;font-weight:700;"></div>
+        `;
+        let n = valoreIniziale;
+        const num = document.getElementById("crNumero");
+        document.getElementById("crMeno").addEventListener("click", () => { if (n > 1) { n--; num.textContent = n; } });
+        document.getElementById("crPiu").addEventListener("click", () => { if (n < 20) { n++; num.textContent = n; } });
+        document.getElementById("crConferma").addEventListener("click", () => {
+          const nome = document.getElementById("crNome").value.trim();
+          if (!nome) { document.getElementById("crMsg").textContent = "Inserisci il tuo nome."; return; }
+          document.getElementById("crMsg").textContent = "Invio in corso...";
+          db.collection("cene").doc(cenaId).update({
+            [`risposte.${respId}`]: { nome, persone: n, ts: new Date().toISOString() }
+          }).then(() => {
+            root.innerHTML = `${intestazione}<div style="font-size:1.1rem;font-weight:700;color:var(--c3);padding-top:10px;">✅ Grazie ${escHtml(nome)}! Confermate ${n} ${n === 1 ? "persona" : "persone"}.</div><button type="button" id="crModifica" style="margin-top:16px;background:none;border:none;text-decoration:underline;color:#555;">Modifica</button>`;
+            document.getElementById("crModifica").addEventListener("click", () => disegnaForm(nome, n));
+          }).catch((e) => {
+            console.error(e);
+            document.getElementById("crMsg").textContent = "Errore nell'invio, riprova.";
+          });
+        });
+      };
+      disegnaForm(precedente ? precedente.nome : "", precedente ? precedente.persone : 1);
+    }).catch((e) => {
+      console.error(e);
+      root.innerHTML = `<div style="padding-top:40px;">⚠️ Errore di connessione. Riprova.</div>`;
+    });
+  });
 }
 
 function popolaOraUscitaSelect(selected) {
@@ -1831,6 +1958,12 @@ function importaBackup() {
 }
 
 /* ===================== AVVIO ===================== */
+const cenaIdParam = new URLSearchParams(location.search).get("cena");
+
+if (cenaIdParam) {
+  renderCenaRisposta(cenaIdParam);
+} else {
+
 let nuovoWorkerInAttesa = null;
 let ricaricaGiaFatta = false;
 
@@ -1893,3 +2026,5 @@ contentEl.addEventListener("touchstart", gestisciSwipeStart, { passive: true });
 contentEl.addEventListener("touchend", gestisciSwipeEnd, { passive: true });
 
 avviaApp();
+
+}
