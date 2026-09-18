@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Conferma presenza</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  body{background:var(--c1);}
+  .invito-wrap{max-width:480px;margin:0 auto;padding:24px 18px 60px;min-height:100vh;box-sizing:border-box;}
+  .invito-box{background:var(--c2);border-radius:16px;padding:22px 18px;margin-top:16px;}
+  .invito-testo{white-space:pre-wrap;font-size:15px;line-height:1.5;margin-bottom:14px;}
+  .invito-meta{font-size:14px;color:#555;font-weight:600;margin-bottom:18px;}
+  .stepper{display:flex;align-items:center;gap:14px;justify-content:center;margin:10px 0 4px;}
+  .stepper button{
+    width:42px;height:42px;border-radius:50%;border:1.5px solid var(--c1);background:var(--c2);
+    font-size:20px;font-weight:700;cursor:pointer;
+  }
+  .stepper .num{font-size:24px;font-weight:700;min-width:36px;text-align:center;}
+  .titolo-app{color:var(--c2);text-align:center;font-weight:700;font-size:16px;padding-top:6px;}
+  .thankyou{text-align:center;padding:40px 10px;}
+  .thankyou .check{font-size:52px;}
+</style>
+</head>
+<body>
+
+<div class="invito-wrap">
+  <div class="titolo-app" id="teamName">Gestione Ciclismo</div>
+
+  <div class="invito-box" id="box">
+    <p class="small-note">Caricamento invito...</p>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCsF0cL2OLwdcA2T_yVYDD0jdmThhViFmo",
+  authDomain: "gestione-ciclismo.firebaseapp.com",
+  projectId: "gestione-ciclismo",
+  storageBucket: "gestione-ciclismo.firebasestorage.app",
+  messagingSenderId: "252606351948",
+  appId: "1:252606351948:web:64d0deb54a61edaefd02e9",
+  measurementId: "G-0MHZR04Y0S",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const params = new URLSearchParams(location.search);
+const invitoId = params.get("id");
+let persone = 1;
+
+function formattaData(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s || "";
+  return div.innerHTML;
+}
+
+function mostraErrore(msg) {
+  document.getElementById("box").innerHTML = `<p class="empty-state">${msg}</p>`;
+}
+
+function renderForm(invito) {
+  document.getElementById("box").innerHTML = `
+    <div class="invito-testo">${escapeHtml(invito.testo)}</div>
+    ${(invito.data || invito.ora) ? `<div class="invito-meta">${invito.data ? "📅 " + formattaData(invito.data) : ""}${invito.data && invito.ora ? "   " : ""}${invito.ora ? "🕐 " + invito.ora : ""}</div>` : ""}
+
+    <div class="field-group required">
+      <label>Il tuo nome</label>
+      <input type="text" id="inpNome" placeholder="Nome e cognome">
+    </div>
+
+    <div class="field-group">
+      <label>Quante persone in totale (te compreso)</label>
+      <div class="stepper">
+        <button type="button" onclick="cambiaPersone(-1)">−</button>
+        <span class="num" id="numPersone">1</span>
+        <button type="button" onclick="cambiaPersone(1)">+</button>
+      </div>
+    </div>
+
+    <div class="action-row" style="margin-top:16px;">
+      <button class="btn btn-viola" onclick="inviaRisposta()">✅ Confermo la presenza</button>
+    </div>
+  `;
+}
+
+function cambiaPersone(delta) {
+  persone = Math.max(1, persone + delta);
+  document.getElementById("numPersone").textContent = persone;
+}
+
+function inviaRisposta() {
+  const nome = document.getElementById("inpNome").value.trim();
+  if (!nome) {
+    alert("Scrivi il tuo nome.");
+    return;
+  }
+  db.collection("invitiRisposte").doc(invitoId).collection("risposte").add({
+    nome,
+    persone,
+    ts: firebase.firestore.FieldValue.serverTimestamp(),
+  }).then(() => {
+    document.getElementById("box").innerHTML = `
+      <div class="thankyou">
+        <div class="check">✅</div>
+        <p><strong>Grazie, ${escapeHtml(nome)}!</strong></p>
+        <p class="small-note">Presenza registrata per ${persone} ${persone === 1 ? "persona" : "persone"}.</p>
+      </div>
+    `;
+  }).catch((e) => {
+    console.error(e);
+    alert("Errore durante l'invio. Controlla la connessione e riprova.");
+  });
+}
+
+if (!invitoId) {
+  mostraErrore("Link non valido.");
+} else {
+  firebase.auth().signInAnonymously().catch((e) => {
+    console.error(e);
+    mostraErrore("Impossibile collegarsi. Controlla la connessione.");
+  });
+  firebase.auth().onAuthStateChanged((user) => {
+    if (!user) return;
+    db.collection("gestioneCiclismo").doc("statoSquadra").get().then((doc) => {
+      if (!doc.exists) {
+        mostraErrore("Invito non trovato.");
+        return;
+      }
+      const data = doc.data();
+      document.getElementById("teamName").textContent = (data.settings && data.settings.teamName) || "Gestione Ciclismo";
+      const invito = (data.inviti || []).find((i) => i.id === invitoId);
+      if (!invito) {
+        mostraErrore("Invito non trovato o rimosso.");
+        return;
+      }
+      renderForm(invito);
+    }).catch((e) => {
+      console.error(e);
+      mostraErrore("Errore di connessione. Riprova più tardi.");
+    });
+  });
+}
+</script>
+
+</body>
+</html>

@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.86";
+const APP_VERSION = "2.06";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -1370,6 +1370,20 @@ function formattaDataInvito(iso) {
   return `${d}/${m}/${y}`;
 }
 
+function linkInvito(id) {
+  const base = location.origin + location.pathname.substring(0, location.pathname.lastIndexOf("/") + 1);
+  return base + "invito.html?id=" + id;
+}
+
+function copiaLinkInvito(id) {
+  const link = linkInvito(id);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(() => alert("Link copiato!")).catch(() => alert(link));
+  } else {
+    alert(link);
+  }
+}
+
 function inviaInvito() {
   const testo = document.getElementById("fInvitoTesto").value.trim();
   const data = document.getElementById("fInvitoData").value;
@@ -1378,14 +1392,6 @@ function inviaInvito() {
   if (!testo) {
     alert("Scrivi il testo dell'invito.");
     return;
-  }
-
-  let messaggio = testo;
-  if (data || ora) {
-    messaggio += "\n\n";
-    if (data) messaggio += `📅 ${formattaDataInvito(data)}`;
-    if (data && ora) messaggio += "   ";
-    if (ora) messaggio += `🕐 ${ora}`;
   }
 
   const invito = {
@@ -1398,6 +1404,15 @@ function inviaInvito() {
   state.inviti.unshift(invito);
   saveState();
 
+  let messaggio = testo;
+  if (data || ora) {
+    messaggio += "\n\n";
+    if (data) messaggio += `📅 ${formattaDataInvito(data)}`;
+    if (data && ora) messaggio += "   ";
+    if (ora) messaggio += `🕐 ${ora}`;
+  }
+  messaggio += "\n\n👉 Confermate qui la presenza (con eventuali ospiti):\n" + linkInvito(invito.id);
+
   window.open("https://wa.me/?text=" + encodeURIComponent(messaggio), "_blank");
 
   document.getElementById("fInvitoTesto").value = "";
@@ -1406,9 +1421,33 @@ function inviaInvito() {
 }
 
 function eliminaInvito(id) {
-  if (!confirm("Eliminare questo invito dallo storico?")) return;
+  if (!confirm("Eliminare questo invito dallo storico? (le eventuali risposte già ricevute resteranno su Firebase ma non saranno più visibili da qui)")) return;
   state.inviti = state.inviti.filter(i => i.id !== id);
   saveState();
+  render();
+}
+
+let risposteInvitiCache = {};
+
+function caricaRisposteInvito(id) {
+  risposteInvitiCache[id] = { loading: true };
+  render();
+  db.collection("invitiRisposte").doc(id).collection("risposte").get()
+    .then((snap) => {
+      const risposte = snap.docs.map((d) => d.data());
+      risposte.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+      risposteInvitiCache[id] = { loading: false, risposte };
+      render();
+    })
+    .catch((e) => {
+      console.error(e);
+      risposteInvitiCache[id] = { loading: false, errore: true };
+      render();
+    });
+}
+
+function nascondiRisposteInvito(id) {
+  delete risposteInvitiCache[id];
   render();
 }
 
@@ -1438,20 +1477,52 @@ function renderInvitiSection(content) {
       <div class="action-row" style="margin-top:14px;">
         <button class="btn btn-viola" onclick="inviaInvito()">📲 Invia su WhatsApp</button>
       </div>
+      <p class="small-note">Nel messaggio verrà incluso anche un link dove chi risponde può indicare il proprio nome e quante persone porta.</p>
     </div>
 
     <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Storico inviti</div>
     ${storico.length === 0 ? `
       <div class="empty-state">Nessun invito inviato finora.</div>
-    ` : storico.map(i => `
-      <div class="persona-card-top" style="align-items:flex-start;">
-        <div class="persona-info-col">
-          <div class="persona-nome">${i.data ? formattaDataInvito(i.data) : ""}${i.ora ? " · " + i.ora : ""}</div>
-          <div class="persona-sub" style="white-space:pre-wrap;">${i.testo}</div>
+    ` : storico.map(i => {
+      const cache = risposteInvitiCache[i.id];
+      const totalePersone = cache && cache.risposte ? cache.risposte.reduce((s, r) => s + (r.persone || 1), 0) : null;
+      return `
+      <div class="quota-card" style="margin-bottom:12px;">
+        <div class="persona-card-top" style="align-items:flex-start;">
+          <div class="persona-info-col">
+            <div class="persona-nome">${i.data ? formattaDataInvito(i.data) : ""}${i.ora ? " · " + i.ora : ""}</div>
+            <div class="persona-sub" style="white-space:pre-wrap;">${i.testo}</div>
+          </div>
+          <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaInvito('${i.id}')">🗑️</button>
         </div>
-        <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaInvito('${i.id}')">🗑️</button>
+
+        <div class="action-row" style="margin-top:10px;">
+          <button class="btn btn-outline" onclick="copiaLinkInvito('${i.id}')">🔗 Copia link</button>
+          ${cache ? `
+            <button class="btn btn-outline" onclick="nascondiRisposteInvito('${i.id}')">Nascondi risposte</button>
+          ` : `
+            <button class="btn btn-outline" onclick="caricaRisposteInvito('${i.id}')">📋 Vedi risposte</button>
+          `}
+        </div>
+
+        ${cache && cache.loading ? `<p class="small-note">Caricamento risposte...</p>` : ""}
+        ${cache && cache.errore ? `<p class="small-note">Errore nel caricamento delle risposte.</p>` : ""}
+        ${cache && cache.risposte ? `
+          ${cache.risposte.length === 0 ? `
+            <p class="small-note">Nessuna risposta ricevuta finora.</p>
+          ` : `
+            <div class="small-note" style="font-weight:700;margin-top:8px;">Totale confermati: ${totalePersone}</div>
+            ${cache.risposte.map(r => `
+              <div class="checkbox-row" style="justify-content:space-between;">
+                <span>${r.nome}</span>
+                <span class="badge">${r.persone || 1}</span>
+              </div>
+            `).join("")}
+          `}
+        ` : ""}
       </div>
-    `).join("")}
+    `;
+    }).join("")}
   `;
 
   popolaOraInvitoSelect("");
