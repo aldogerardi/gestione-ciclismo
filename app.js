@@ -1,5 +1,5 @@
 /* ===================== COSTANTI ===================== */
-const APP_VERSION = "1.66";
+const APP_VERSION = "1.86";
 const NICKNAME_KEY = "gestione_ciclismo_nickname";
 
 /* ===================== FIREBASE ===================== */
@@ -29,6 +29,7 @@ const SEZIONI = [
   { id: "abbigliamento", nome: "Abbigliamento", icona: "👕" },
   { id: "uscite", nome: "Uscite gruppo", icona: "🚴" },
   { id: "presenze", nome: "Presenze", icona: "✅" },
+  { id: "inviti", nome: "Inviti", icona: "📩" },
   { id: "gare", nome: "Gare", icona: "🏁" },
   { id: "circuiti", nome: "Circuiti", icona: "🗺️" },
   { id: "report", nome: "Report", icona: "📊" },
@@ -74,6 +75,7 @@ function defaultState() {
     gare: [],
     sponsor: [],
     uscite: [],
+    inviti: [],
   };
 }
 
@@ -87,6 +89,7 @@ function normalizzaStato(parsed) {
     gare: parsed.gare || [],
     sponsor: parsed.sponsor || [],
     uscite: parsed.uscite || [],
+    inviti: parsed.inviti || [],
   };
 }
 
@@ -351,6 +354,10 @@ function renderContent() {
   }
   if (currentSection === "presenze") {
     renderPresenzeSection(content);
+    return;
+  }
+  if (currentSection === "inviti") {
+    renderInvitiSection(content);
     return;
   }
   if (currentSection === "abbigliamento") {
@@ -1342,6 +1349,112 @@ function renderPresenzeSection(content) {
       </div>
     `}
   `;
+}
+
+/* ===================== SEZIONE INVITI (CENE/EVENTI) ===================== */
+function popolaOraInvitoSelect(selected) {
+  const sel = document.getElementById("fInvitoOra");
+  let opts = `<option value="">-</option>`;
+  for (let h = 0; h < 24; h++) {
+    ["00", "30"].forEach(m => {
+      const val = String(h).padStart(2, "0") + ":" + m;
+      opts += `<option value="${val}" ${val === selected ? "selected" : ""}>${val}</option>`;
+    });
+  }
+  sel.innerHTML = opts;
+}
+
+function formattaDataInvito(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function inviaInvito() {
+  const testo = document.getElementById("fInvitoTesto").value.trim();
+  const data = document.getElementById("fInvitoData").value;
+  const ora = document.getElementById("fInvitoOra").value;
+
+  if (!testo) {
+    alert("Scrivi il testo dell'invito.");
+    return;
+  }
+
+  let messaggio = testo;
+  if (data || ora) {
+    messaggio += "\n\n";
+    if (data) messaggio += `📅 ${formattaDataInvito(data)}`;
+    if (data && ora) messaggio += "   ";
+    if (ora) messaggio += `🕐 ${ora}`;
+  }
+
+  const invito = {
+    id: uid(),
+    data,
+    ora,
+    testo,
+    inviatoIl: new Date().toISOString(),
+  };
+  state.inviti.unshift(invito);
+  saveState();
+
+  window.open("https://wa.me/?text=" + encodeURIComponent(messaggio), "_blank");
+
+  document.getElementById("fInvitoTesto").value = "";
+  document.getElementById("fInvitoData").value = "";
+  render();
+}
+
+function eliminaInvito(id) {
+  if (!confirm("Eliminare questo invito dallo storico?")) return;
+  state.inviti = state.inviti.filter(i => i.id !== id);
+  saveState();
+  render();
+}
+
+function renderInvitiSection(content) {
+  const storico = [...state.inviti].sort((a, b) => (b.inviatoIl || "").localeCompare(a.inviatoIl || ""));
+
+  content.innerHTML = `
+    <div class="section-title"><span class="dot"></span>Inviti cene / eventi</div>
+
+    <div class="quota-card">
+      <div class="field-group required">
+        <label>Testo invito</label>
+        <textarea id="fInvitoTesto" rows="5" style="width:100%;padding:10px 12px;border:1.5px solid var(--grigio-bordo);border-radius:10px;font-size:14.5px;font-family:inherit;resize:vertical;" placeholder="Es. Ciao a tutti, vi aspettiamo per la cena sociale del gruppo..."></textarea>
+      </div>
+
+      <div class="field-row">
+        <div class="field-group">
+          <label>Data</label>
+          <input type="date" id="fInvitoData">
+        </div>
+        <div class="field-group">
+          <label>Ora</label>
+          <select id="fInvitoOra"></select>
+        </div>
+      </div>
+
+      <div class="action-row" style="margin-top:14px;">
+        <button class="btn btn-viola" onclick="inviaInvito()">📲 Invia su WhatsApp</button>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:22px;"><span class="dot"></span>Storico inviti</div>
+    ${storico.length === 0 ? `
+      <div class="empty-state">Nessun invito inviato finora.</div>
+    ` : storico.map(i => `
+      <div class="persona-card-top" style="align-items:flex-start;">
+        <div class="persona-info-col">
+          <div class="persona-nome">${i.data ? formattaDataInvito(i.data) : ""}${i.ora ? " · " + i.ora : ""}</div>
+          <div class="persona-sub" style="white-space:pre-wrap;">${i.testo}</div>
+        </div>
+        <button class="btn btn-danger" style="flex:0 0 auto;" onclick="eliminaInvito('${i.id}')">🗑️</button>
+      </div>
+    `).join("")}
+  `;
+
+  popolaOraInvitoSelect("");
 }
 
 function popolaOraUscitaSelect(selected) {
